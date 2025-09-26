@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+/* global NDEFReader */
 
 const API_URL = "https://nfc-reader-backend-6iwh.onrender.com";
 
@@ -24,65 +25,34 @@ function App() {
 
   // Initialize NFC reading
   useEffect(() => {
-    if ("NDEFReader" in window) {
-      const nfc = new NDEFReader();
+    const initNFC = async () => {
+      if (!("NDEFReader" in window)) {
+        setError("Web NFC is not supported on this device/browser");
+        return;
+      }
 
-      const startNFC = async () => {
-        try {
-          await nfc.scan();
-          console.log("NFC reader started. Tap a tag to scan.");
+      try {
+        const nfc = new NDEFReader();
+        await nfc.scan();
+        console.log("NFC reader started. Tap a tag to scan.");
 
-          nfc.onreading = async (event) => {
-            const message = event.message;
-            const records = [];
+        nfc.onreading = async (event) => {
+          // ... rest of your NFC reading code
+        };
 
-            for (const record of message.records) {
-              let data;
-              if (record.recordType === "text") {
-                const textDecoder = new TextDecoder(record.encoding);
-                data = textDecoder.decode(record.data);
-              } else if (record.recordType === "url") {
-                const textDecoder = new TextDecoder();
-                data = textDecoder.decode(record.data);
-              } else {
-                data = Array.from(record.data, (b) =>
-                  b.toString(16).padStart(2, "0")
-                ).join(":");
-              }
+        nfc.onreadingerror = (event) => {
+          console.error("NFC read error:", event.message);
+          setError(`NFC read error: ${event.message}`);
+        };
+      } catch (err) {
+        console.error("Error initializing NFC:", err);
+        setError(
+          "Failed to initialize NFC. Make sure NFC is enabled and you've granted permission."
+        );
+      }
+    };
 
-              records.push({
-                recordType: record.recordType,
-                data: data,
-                mediaType: record.mediaType,
-              });
-            }
-
-            try {
-              const response = await axios.post(`${API_URL}/taps`, {
-                records,
-                serialNumber: event.serialNumber || "unknown",
-              });
-              setTapHistory((prev) => [response.data, ...prev]);
-            } catch (err) {
-              console.error("Error saving tap:", err);
-              setError("Failed to save tap data");
-            }
-          };
-
-          nfc.onreadingerror = (event) => {
-            console.error("NFC read error:", event.message);
-            setError(`NFC read error: ${event.message}`);
-          };
-        } catch (err) {
-          console.error("Error initializing NFC:", err);
-          setError("NFC is not supported or permission denied");
-        }
-      };
-
-      startNFC();
-    } else {
-      setError("Web NFC is not supported on this device/browser");
-    }
+    initNFC();
   }, []);
 
   return (
