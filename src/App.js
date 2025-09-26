@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "https://nfc-reader-backend-6iwh.onrender.com";
 
 function App() {
   const [tapHistory, setTapHistory] = useState([]);
