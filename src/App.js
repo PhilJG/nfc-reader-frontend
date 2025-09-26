@@ -145,7 +145,7 @@ function App() {
                 {tap.tagType && (
                   <div>
                     <strong>Type:</strong> {tap.tagType}
-                    {tagType === "NDEF" && tap.recordCount > 0 && (
+                    {tap.tagType === "NDEF" && tap.recordCount > 0 && (
                       <span> ({tap.recordCount} records)</span>
                     )}
                   </div>
