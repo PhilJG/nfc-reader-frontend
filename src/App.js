@@ -8,6 +8,8 @@ const API_URL = "https://nfc-reader-backend-6iwh.onrender.com/api";
 function App() {
   const [tapHistory, setTapHistory] = useState([]);
   const [error, setError] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+  const [nfcReader, setNfcReader] = useState(null);
 
   // Load tap history on mount
   useEffect(() => {
@@ -24,81 +26,70 @@ function App() {
     loadHistory();
   }, []);
 
-  // Initialize NFC reading
-  // Update the NFC initialization code in your useEffect
+  // Handle NFC reading when nfcReader changes
   useEffect(() => {
-    const initNFC = async () => {
-      if (!("NDEFReader" in window)) {
-        setError("Web NFC is not supported on this device/browser");
-        return;
+    if (!nfcReader) return;
+
+    // This will fire when any NFC tag is detected
+    nfcReader.onreading = async (event) => {
+      const tagData = {
+        timestamp: new Date().toISOString(),
+        serialNumber: event.serialNumber || "unknown",
+        tagType: "unknown",
+        hasNdef: false,
+      };
+
+      // Try to get basic tag info
+      if (event.message?.records?.length > 0) {
+        tagData.hasNdef = true;
+        tagData.recordCount = event.message.records.length;
+        tagData.recordTypes = [
+          ...new Set(event.message.records.map((r) => r.recordType)),
+        ];
       }
 
+      // Try to detect tag type
+      tagData.tagType = event.message?.records ? "NDEF" : "Non-NDEF";
+
       try {
-        const nfc = new NDEFReader();
-
-        // Add a watch for any NFC tag
-        await nfc.scan();
-        console.log("NFC reader started. Tap any NFC tag.");
-
-        // This will fire when any NFC tag is detected
-        nfc.onreading = async (event) => {
-          const tagData = {
-            timestamp: new Date().toISOString(),
-            serialNumber: event.serialNumber || "unknown",
-            tagType: "unknown",
-            hasNdef: false,
-          };
-
-          // Try to get basic tag info
-          if (
-            event.message &&
-            event.message.records &&
-            event.message.records.length > 0
-          ) {
-            tagData.hasNdef = true;
-            tagData.recordCount = event.message.records.length;
-            tagData.recordTypes = [
-              ...new Set(event.message.records.map((r) => r.recordType)),
-            ];
-          }
-
-          // Try to detect tag type
-          if (event.message && event.message.records) {
-            // This is an NDEF tag
-            tagData.tagType = "NDEF";
-          } else {
-            // Non-NDEF tag (like your YMCA card)
-            tagData.tagType = "Non-NDEF";
-          }
-
-          try {
-            // Send the tap event to the server
-            const response = await axios.post(`${API_URL}/taps`, tagData);
-            console.log("Tag tapped:", response.data);
-            setTapHistory((prev) => [response.data, ...prev]);
-          } catch (err) {
-            console.error("Error saving tap:", err);
-            setError("Failed to save tap data");
-          }
-        };
-
-        nfc.onreadingerror = (event) => {
-          console.error("NFC read error:", event.message);
-          setError(`NFC error: ${event.message}`);
-        };
+        const response = await axios.post(`${API_URL}/taps`, tagData);
+        console.log("Tag tapped:", response.data);
+        setTapHistory((prev) => [response.data, ...prev]);
       } catch (err) {
-        console.error("Error initializing NFC:", err);
-        setError(`Failed to initialize NFC: ${err.message}`);
+        console.error("Error saving tap:", err);
+        setError("Failed to save tap data");
       }
     };
 
-    initNFC();
+    nfcReader.onreadingerror = (event) => {
+      console.error("NFC read error:", event.message);
+      setError(`NFC error: ${event.message}`);
+    };
 
     // Cleanup function
     return () => {
       // Any cleanup if needed
     };
-  }, []);
+  }, [nfcReader]);
+
+  const startNFCScan = async () => {
+    if (!("NDEFReader" in window)) {
+      setError("Web NFC is not supported on this device/browser");
+      return;
+    }
+
+    try {
+      const nfc = new NDEFReader();
+      await nfc.scan(); // This must be called in response to a user gesture
+      setNfcReader(nfc);
+      setIsScanning(true);
+      setError(""); // Clear any previous errors
+    } catch (err) {
+      console.error("Error initializing NFC:", err);
+      setError(`Failed to start NFC: ${err.message}`);
+      setIsScanning(false);
+    }
+  };
 
   return (
     <div
@@ -110,7 +101,21 @@ function App() {
       {error && <div style={{ color: "red", margin: "10px 0" }}>{error}</div>}
 
       <div style={{ margin: "20px 0" }}>
-        <h2>Tap an NFC tag to log it</h2>
+        <button
+          onClick={startNFCScan}
+          disabled={isScanning}
+          style={{
+            padding: "10px 20px",
+            fontSize: "16px",
+            backgroundColor: isScanning ? "#ccc" : "#4CAF50",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: isScanning ? "not-allowed" : "pointer",
+          }}
+        >
+          {isScanning ? "Scanning for NFC Tags..." : "Start NFC Scan"}
+        </button>
         <p>Make sure NFC is enabled on your device</p>
       </div>
 
@@ -137,19 +142,12 @@ function App() {
                 <div>
                   <strong>Tag ID:</strong> {tap.serialNumber}
                 </div>
-                {tap.records && tap.records.length > 0 && (
-                  <div style={{ marginTop: "5px" }}>
-                    <strong>Data:</strong>
-                    <pre
-                      style={{
-                        background: "#f5f5f5",
-                        padding: "5px",
-                        borderRadius: "3px",
-                        overflowX: "auto",
-                      }}
-                    >
-                      {JSON.stringify(tap.records, null, 2)}
-                    </pre>
+                {tap.tagType && (
+                  <div>
+                    <strong>Type:</strong> {tap.tagType}
+                    {tagType === "NDEF" && tap.recordCount > 0 && (
+                      <span> ({tap.recordCount} records)</span>
+                    )}
                   </div>
                 )}
               </li>
