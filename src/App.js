@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-/* global NDEFReader */
 
-const API_URL = "https://nfc-reader-backend-6iwh.onrender.com";
+const API_URL = "https://nfc-reader-backend-6iwh.onrender.com/api";
+// const API_URL = "http://localhost:5000";
 
 function App() {
   const [tapHistory, setTapHistory] = useState([]);
@@ -24,6 +24,7 @@ function App() {
   }, []);
 
   // Initialize NFC reading
+  // Update the NFC initialization code in your useEffect
   useEffect(() => {
     const initNFC = async () => {
       if (!("NDEFReader" in window)) {
@@ -33,26 +34,69 @@ function App() {
 
       try {
         const nfc = new NDEFReader();
-        await nfc.scan();
-        console.log("NFC reader started. Tap a tag to scan.");
 
+        // Add a watch for any NFC tag
+        await nfc.scan();
+        console.log("NFC reader started. Tap any NFC tag.");
+
+        // This will fire when any NFC tag is detected
         nfc.onreading = async (event) => {
-          // ... rest of your NFC reading code
+          const tagData = {
+            timestamp: new Date().toISOString(),
+            serialNumber: event.serialNumber || "unknown",
+            tagType: "unknown",
+            hasNdef: false,
+          };
+
+          // Try to get basic tag info
+          if (
+            event.message &&
+            event.message.records &&
+            event.message.records.length > 0
+          ) {
+            tagData.hasNdef = true;
+            tagData.recordCount = event.message.records.length;
+            tagData.recordTypes = [
+              ...new Set(event.message.records.map((r) => r.recordType)),
+            ];
+          }
+
+          // Try to detect tag type
+          if (event.message && event.message.records) {
+            // This is an NDEF tag
+            tagData.tagType = "NDEF";
+          } else {
+            // Non-NDEF tag (like your YMCA card)
+            tagData.tagType = "Non-NDEF";
+          }
+
+          try {
+            // Send the tap event to the server
+            const response = await axios.post(`${API_URL}/taps`, tagData);
+            console.log("Tag tapped:", response.data);
+            setTapHistory((prev) => [response.data, ...prev]);
+          } catch (err) {
+            console.error("Error saving tap:", err);
+            setError("Failed to save tap data");
+          }
         };
 
         nfc.onreadingerror = (event) => {
           console.error("NFC read error:", event.message);
-          setError(`NFC read error: ${event.message}`);
+          setError(`NFC error: ${event.message}`);
         };
       } catch (err) {
         console.error("Error initializing NFC:", err);
-        setError(
-          "Failed to initialize NFC. Make sure NFC is enabled and you've granted permission."
-        );
+        setError(`Failed to initialize NFC: ${err.message}`);
       }
     };
 
     initNFC();
+
+    // Cleanup function
+    return () => {
+      // Any cleanup if needed
+    };
   }, []);
 
   return (
