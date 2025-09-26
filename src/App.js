@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+/* global NDEFReader */
 
 const API_URL = "https://nfc-reader-backend-6iwh.onrender.com/api";
 // const API_URL = "http://localhost:5000";
